@@ -22,7 +22,7 @@ gguf/
 *.gguf
 runs/
 wandb/
-LAB21_2A202602584.zip
+lab21_*/
 
 # Model / HF cache
 .cache/

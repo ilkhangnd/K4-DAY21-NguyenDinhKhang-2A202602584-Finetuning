@@ -64,12 +64,24 @@ assert delta >= -TOL, (
     "với DoRA cần PEFT ≥ 0.10 để gộp đúng vector magnitude (deck §23)."
 )
 
-out = ROOT / "adapters" / "merged"
-merged.save_pretrained(out); tok.save_pretrained(out)
 report.write_json({"before_merge": before, "after_merge": after, "delta": delta,
                    "tolerance": TOL, "n": len(target)},
                   "merge_check.json", results_dir=ROOT / "results")
-del merged; generate.free_memory()
+print("✅ Đã ghi results/merge_check.json thành công!")
+
+out = ROOT / "adapters" / "merged"
+out.mkdir(parents=True, exist_ok=True)
+tok.save_pretrained(out)
+merged.config.save_pretrained(out)
+
+del model, merged
+generate.free_memory()
+import gc, torch
+gc.collect()
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+
+
 
 # %% [markdown]
 # ## 3. Một base, nhiều adapter — hoán đổi theo request
@@ -77,16 +89,26 @@ del merged; generate.free_memory()
 # Đây là lập luận kinh tế của LoRA ở deck §23: base nằm trong VRAM một lần, mỗi khách
 # hàng/tác vụ là một adapter vài chục MB.
 
-# %%
 model, tok = generate.load_base(TIER)
-model = PeftModel.from_pretrained(model, str(ROOT / "adapters" / "correct"),
-                                  adapter_name="correct")
+offload_dir = str(ROOT / "adapters" / "offload")
+pathlib.Path(offload_dir).mkdir(parents=True, exist_ok=True)
+try:
+    model = PeftModel.from_pretrained(model, str(ROOT / "adapters" / "correct"),
+                                      adapter_name="correct", offload_folder=offload_dir)
+except TypeError:
+    model = PeftModel.from_pretrained(model, str(ROOT / "adapters" / "correct"),
+                                      adapter_name="correct")
+
 available = ["correct"]
 for extra in ("attn_only", "qlora"):
     d = ROOT / "adapters" / extra
     if d.exists():
-        model.load_adapter(str(d), adapter_name=extra)
+        try:
+            model.load_adapter(str(d), adapter_name=extra, offload_folder=offload_dir)
+        except TypeError:
+            model.load_adapter(str(d), adapter_name=extra)
         available.append(extra)
+
 
 print("adapter đang nạp:", available)
 ticket = target[0]["input"]

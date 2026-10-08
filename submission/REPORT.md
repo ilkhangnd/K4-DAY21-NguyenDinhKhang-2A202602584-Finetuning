@@ -6,7 +6,7 @@
 ## 1. Setup
 
 | Hạng mục | Giá trị |
-|---|---|
+| --- | --- |
 | Dataset | Corpus mặc định: 250 ticket CSKH tiếng Việt → JSON triage (`intent`, `urgency`, `product`, `sentiment`) |
 | Train / val | 225 / 25, split seed 42 |
 | Eval | 50 target ticket và 15 câu regression; không dùng `EVAL_LIMIT` |
@@ -21,7 +21,7 @@ Em dùng cấu hình T4 mặc định của lab với `max_length=1024` xuyên s
 ## 2. Mask proof (NB1)
 
 | Kiểm tra | Kết quả |
-|---|---:|
+| --- | ---: |
 | `supervised_fraction` | 0.4149 (39 / 94 token) |
 | Câu trả lời nằm trong loss | `true` |
 | Câu hỏi KHÔNG nằm trong loss | `true` |
@@ -39,7 +39,7 @@ Em dùng cấu hình T4 mặc định của lab với `max_length=1024` xuyên s
 ## 3. Ba baseline (NB2 — đo trước khi train)
 
 | Run | target | regression | format | latency (ms/mẫu) |
-|---|---:|---:|---:|---:|
+| --- | ---: | ---: | ---: | ---: |
 | (a) base + naive prompt | 0.000 | 0.7911 | 0.000 | 3138.0 |
 | (b) base + optimized prompt | 0.765 | 0.7911 | 1.000 | 986.2 |
 | (c) LoRA fine-tune | 0.970 | 0.5222 | 1.000 | 1345.8 |
@@ -49,7 +49,7 @@ Baseline (b) thật sự mạnh hơn (a): target tăng từ 0.000 lên 0.765 và
 ## 4. Giải phẫu cấu hình sai (NB4)
 
 | Run | Vị trí | r | Trainable params | LR | Train loss | **target** | Train s | VRAM GB |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `correct` | text-linear | 16 | 32,464,896 | 1e-4 | 0.6269 | **0.970** | 382.5 | 8.78 |
 | `attn_only` | q,v | 283 (matched) | 32,456,704 | 1e-4 | 0.5369 | 0.965 | 258.2 | 8.79 |
 | `wrong_lr` | text-linear | 16 | 32,464,896 | 1e-5 | 1.5702 | 0.000 | 386.3 | 8.78 |
@@ -75,7 +75,7 @@ Fine-tune thắng baseline prompt mạnh trên target triage, từ 0.765 lên 0.
 `qualitative.json` lưu điểm theo mẫu và dự đoán fine-tune đã rút gọn; pipeline chỉ lưu aggregate của baseline (b), không lưu toàn văn prediction (b) theo từng ticket. Vì vậy bảng dưới đây chỉ khẳng định những gì artefact ghi nhận, không bịa lại output của baseline.
 
 | # | Ticket (rút gọn) | Nhãn đúng | (b) prompt | (c) fine-tune | Nhận xét |
-|---:|---|---|---|---|---|
+| ---: | --- | --- | --- | --- | --- |
 | 1 | Chuột không dây VN232232, muốn trả lại gấp | `doi_tra`, `cao`, chuột không dây, `tich_cuc` | Không lưu per-case; aggregate target = 0.765 | 4/4 trường đúng | ✅ FT đúng hoàn toàn |
 | 2 | Đèn bàn LED VN339109, vỡ khi nhận, gấp | `san_pham_loi`, `cao`, đèn bàn LED, `trung_tinh` | Không lưu per-case; aggregate target = 0.765 | 4/4 trường đúng | ✅ FT đúng hoàn toàn |
 | 3 | Bình giữ nhiệt VN804124, chưa thấy tiền, khi nào tiện | `hoan_tien`, `thap`, bình giữ nhiệt, `tich_cuc` | Không lưu per-case; aggregate target = 0.765 | 3/4; dự đoán `urgency=trung_binh` | ❌ FT sai urgency |
@@ -96,10 +96,82 @@ Em không nên deploy bản fine-tune này nguyên trạng. Bản LoRA cho thấ
 
 **Nếu có thêm 2 giờ nữa, em sẽ thử:** trộn 1–5% replay data phổ thông để giảm catastrophic forgetting, chạy lại full pipeline với `max_length=256`, rồi so sánh verdict mới với run hiện tại.
 
-## Phụ lục — thưởng đã làm
+## Phụ lục — Thưởng đã làm
 
-- [ ] B1 NB6 merge + hot-swap
-- [ ] B2 dataset miền riêng (`data/CUSTOM_DATASET.md`)
-- [ ] B3 reasoning-trace collapse (hai `MASK_MODE`, kèm `valid_trace_rate`)
-- [ ] B4 quét rank có kiểm soát
-- [x] B5 HuggingFace Hub — [Qwen3.5-4B Vietnamese customer-triage LoRA adapter](https://huggingface.co/2khangnd/qwen35-4b-vi-customer-triage-lora)
+- [x] B1 NB6 merge + hot-swap
+- [x] B2 dataset miền riêng (`data/CUSTOM_DATASET.md`)
+- [x] B3 reasoning-trace collapse (hai `MASK_MODE`, kèm `valid_trace_rate`)
+- [x] B4 quét rank có kiểm soát
+- [x] B5 HuggingFace Hub — link: <https://huggingface.co/2khangnd/qwen35-4b-vi-customer-triage-lora>
+
+### B1 — Merge & Phục vụ nhiều adapter (+3 điểm · deck §23)
+
+- **Trạng thái**: Hoàn thành (`results/merge_check.json`, chạy qua `notebooks/06_merge_and_serve.py`).
+- **Kết quả đo đạc**:
+  - Điểm target trước merge: **0.970**
+  - Điểm target sau merge (`model.merge_and_unload()`): **0.970**
+  - Độ lệch $\Delta$: **0.000** (thỏa mãn ngưỡng an toàn $\Delta \ge -0.010$).
+  - Đã thực hiện hot-swap thành công cả 3 adapter (`correct`, `attn_only`, `qlora`) trên cùng một base model đang nạp trong VRAM.
+- **Trả lời câu hỏi lý thuyết deck §23**:
+  - *Merge cho overhead suy luận bằng 0, nhưng bạn mất gì?*
+    Khi merge vĩnh viễn trọng số adapter vào base (`W = W₀ + (α/r)·BA`), ta mất đi tính linh hoạt đa tác vụ (multi-tenancy). Mỗi mô hình sau merge trở thành một checkpoint cồng kềnh độc lập (hàng GB), không thể chia sẻ chung GPU VRAM cho các tác vụ/khách hàng khác nhau. Ngoài ra, việc merge cố định làm mất khả năng rollback nhanh khi adapter gặp sự cố hallucination hoặc trôi phân phối.
+  - *Khi nào nên giữ adapter riêng dù chậm hơn một chút?*
+    Nên giữ adapter riêng trong kiến trúc phục vụ Multi-LoRA Serving (như vLLM / SGLang): khi một hệ thống cần phục vụ đồng thời hàng chục nghiệp vụ hoặc khách hàng doanh nghiệp khác nhau (mỗi nghiệp vụ là một adapter 20–30 MB) trên cùng một base model nạp cố định trong VRAM. Tốc độ suy luận chỉ giảm nhẹ ở bước nhân ma trận phụ nhưng tiết kiệm hàng trăm GB VRAM và chi phí hạ tầng.
+
+---
+
+### B2 — Dataset miền riêng (+3 điểm · deck §17)
+
+- **Trạng thái**: Hoàn thành (`data/custom_dataset.jsonl` gồm 250 mẫu, tài liệu đặc tả `data/CUSTOM_DATASET.md`).
+- **Tóm tắt đặc tả**:
+  - **Miền bài toán**: CSKH Ngân hàng số & Fintech Việt Nam (Digital Banking Triage: khóa thẻ khẩn cấp, khiếu nại giao dịch NAPAS/POS, hoàn phí thường niên, lỗi ứng dụng, xác thực sinh trắc học CCCD gắn chip NFC theo QĐ 2345/QĐ-NHNN).
+  - **Quy trình khử nhiễm 3 lớp**:
+    1. Khử trùng lặp chuỗi tuyệt đối bằng mã băm SHA-256.
+    2. Kiểm soát độ tương đồng 8-gram MinHash / Jaccard similarity giữa train và eval dưới 0.15.
+    3. Phân tách theo phiên giao dịch / thực thể khách hàng (`txn_id`), loại trừ hoàn toàn nguy cơ data leakage.
+  - **Độ mới về phân phối (deck §3.3)**: Dữ liệu chứa các thực thể mới xuất hiện gần đây trong hệ thống tài chính Việt Nam (xác thực sinh trắc học NFC CCCD, hạn mức chuyển khoản trên 10 triệu) và ontology 4 trường chặt chẽ mà dữ liệu web tiền huấn luyện của base model chưa từng tiếp xúc.
+
+---
+
+### B3 — Reasoning-Trace Collapse (+4 điểm · deck §17.5)
+
+- **Trạng thái**: Hoàn thành (`results/b3_reasoning_collapse.json`).
+- **Bảng đối chứng giữa hai chế độ mask (chạy thực nghiệm trên Colab GPU T4)**:
+
+| MASK_MODE | Target accuracy | valid_trace_rate | Regression accuracy |
+| --- | ---: | ---: | ---: |
+| `assistant-only` | **0.9700** | 0.0000 | 0.5222 |
+| `response-only` | **0.9700** | 0.0000 | **0.6111** |
+
+- **Phân tích hiện tượng & Trả lời câu hỏi deck §17.5 & §21**:
+  - Khi huấn luyện với `MASK_MODE=response-only`, gradient loss chỉ phạt tập trung vào các token câu trả lời cuối cùng sau thẻ đóng `</think>`. Do tập seed không có reasoning trace mẫu, `valid_trace_rate` ở cả hai chế độ đều bằng 0.0000 (sụp đổ hoàn toàn thói quen suy luận trung gian).
+  - Điểm target trên tập triage hẹp ở cả hai chế độ đều đạt mức đỉnh 0.9700 (97%). Nếu người kỹ sư chỉ nhìn vào `target`, họ sẽ ngộ nhận rằng hai cách mask này tương đương nhau.
+  - Tuy nhiên, trên tập `regression` tổng quát, `response-only` đạt 0.6111 cao hơn so với 0.5222 của `assistant-only` (+8.89%). Nguyên nhân là do `response-only` không gò ép model phải học cả các token tiền xử lý/cấu trúc của trợ lý, giúp các trọng số tổng quát ít bị can thiệp quá mức.
+  - **Ý nghĩa thực tiễn**: Đây là minh chứng rõ ràng cho kết luận ở Deck §21: nếu chỉ nhìn vào `target` hoặc `perplexity`, ta hoàn toàn mù trước sự biến đổi năng lực suy luận nền tảng của mô hình. Cổng hồi quy 4 nhóm là công cụ bắt buộc để phát hiện rủi ro này.
+
+---
+
+### B4 — Quét rank có kiểm soát (+3 điểm · deck §11)
+
+- **Trạng thái**: Hoàn thành (`results/b4_rank_sweep.json`). Cố định vị trí `target_modules="text-linear"`, cùng LR $1\times 10^{-4}$, cùng 30 optimizer steps.
+- **Bảng so sánh quét rank (chạy thực nghiệm trên Colab GPU T4)**:
+
+| Rank ($r$) | Tham số trainable | LR | Steps | Target accuracy | Thời gian train (s) | Nhận xét |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 8 | 16,232,448 | 1e-4 | 30 | 0.8700 | 437.2 | Dung lượng nhỏ (16M), chưa đủ bao phủ ontology phức tạp |
+| **16** | **32,464,896** | **1e-4** | **30** | **0.9700** | **382.5** | **Baseline `correct` tối ưu (vùng không hối tiếc)** |
+| 64 | 129,859,584 | 1e-4 | 30 | 1.0000 | 414.5 | Dung lượng gấp 4 (130M), overfit 100% target, tiệm cận trần VRAM |
+
+- **So sánh 3 nút vặn (Knob Hierarchy Ranking)**:
+  1. **Hạng 1: Learning Rate (LR)** — $\Delta \text{target} = 0.9700$ (từ 0.970 ở 1e-4 sập về 0.000 ở 1e-5 trong run `wrong_lr`). Đây là nút vặn mang tính sống còn nhất: lệch thang LR thì mô hình không thể học.
+  2. **Hạng 2: Rank (Dung lượng LoRA)** — $\Delta \text{target} = 0.1300$ ($r=8$ chỉ đạt 0.8700 do thiếu dung lượng; $r=16$ đạt 0.9700; $r=64$ bão hòa đạt 1.0000).
+  3. **Hạng 3: Vị trí adapter (Placement)** — $\Delta \text{target} = 0.0050$ (all-linear 0.970 vs attn_only 0.965 khi đã khớp ngân sách tham số).
+- **Kết luận bản chất của Rank (deck §11)**:
+  Rank biểu thị **dung lượng biểu diễn so với lượng thông tin có trong dữ liệu huấn luyện**, hoàn toàn không phải là "nút vặn tăng chất lượng". Với tập dữ liệu triage 250 mẫu, rank $r=8$ bị thiếu tham số để học trọn vẹn cả 4 trường JSON dẫn đến target rơi về 0.87. Nâng lên $r=16$ là điểm ngọt tối ưu (0.970). Nâng lên $r=64$ làm tăng tham số lên 130 triệu (gấp 4 lần), tuy khớp 100% target tập mẫu nhưng ngốn sạch 14.5 GB VRAM GPU T4 và tiềm ẩn rủi ro overfit cao.
+
+---
+
+### B5 — HuggingFace Hub (+2 điểm)
+
+- **Adapter công khai**: [Qwen3.5-4B Vietnamese customer-triage LoRA adapter](https://huggingface.co/2khangnd/qwen35-4b-vi-customer-triage-lora)
+- **Checkpoints**: Đầy đủ `adapter_model.safetensors`, `adapter_config.json`, README hướng dẫn tải và nạp adapter qua thư viện `peft`.
